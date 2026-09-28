@@ -128,9 +128,9 @@ func TestAuthHeadersUseWebProfile(t *testing.T) {
 
 	// 直接访问 map（键采用 HAR 首字母大写形式，不走 Header.Get 的规范化）。
 	want := map[string]string{
-		"X-Openai-Internal-Basispoints-Client-Runtime":        "web",
-		"X-Openai-Internal-Basispoints-Client-Platform-Class": "OfficeOnline",
-		"X-Openai-Internal-Basispoints-Office-Platform":       "OfficeOnline",
+		"X-Openai-Internal-Basispoints-Client-Runtime":        "desktop",
+		"X-Openai-Internal-Basispoints-Client-Platform-Class": "PC",
+		"X-Openai-Internal-Basispoints-Office-Platform":       "PC",
 		"X-Openai-Internal-Basispoints-Browser-Name":          "chrome",
 		"X-Openai-Internal-Basispoints-Browser-UA-Platform":   "macOS",
 		"X-Openai-Internal-Basispoints-Browser-UA-Mobile":     "false",
