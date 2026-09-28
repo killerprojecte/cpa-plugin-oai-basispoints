@@ -72,10 +72,10 @@ func basispointsClientInfo(cfg Config) map[string]string {
 		"X-Openai-Internal-Basispoints-Client-Agent-Profile":  "excel",
 		"X-Openai-Internal-Basispoints-Client-Editor":         "excel",
 		"X-Openai-Internal-Basispoints-Client-Host":           "office",
-		"X-Openai-Internal-Basispoints-Client-Runtime":        "web",
-		"X-Openai-Internal-Basispoints-Client-Platform-Class": "OfficeOnline",
+		"X-Openai-Internal-Basispoints-Client-Runtime":        "desktop",
+		"X-Openai-Internal-Basispoints-Client-Platform-Class": "PC",
 		"X-Openai-Internal-Basispoints-Office-Host":           "Excel",
-		"X-Openai-Internal-Basispoints-Office-Platform":       "OfficeOnline",
+		"X-Openai-Internal-Basispoints-Office-Platform":       "PC",
 		"X-Openai-Internal-Basispoints-Browser-Name":          "chrome",
 		"X-Openai-Internal-Basispoints-Browser-UA-Platform":   uaPlatform,
 		"X-Openai-Internal-Basispoints-Browser-UA-Mobile":     "false",
@@ -108,7 +108,9 @@ func authHeaders(c credential, cfg Config, stream bool) http.Header {
 		"X-Stainless-Package-Version": []string{"6.31.0"},
 		"X-Stainless-Retry-Count":     []string{"0"},
 		"X-Stainless-Runtime":         []string{"browser:chrome"},
+		"X-Stainless-Runtime-Version": []string{"153.0.0"},
 		"User-Agent":                  []string{userAgent},
+		"Referer": 					   []string{"https://bps.openai.com/basispoints/extension/360590d7-f8f9-4d88-bf75-0edfe0a4b9f3/?et=PAByACAAdgA9ACIAMQAiAD4APAB0ACAAYQBpAGQAPQAiAFcAQQAyADAAMAAwADEAMAAyADEANQAiACAAcABpAGQAPQAiAGMAYgBhADkAZgBjADAANgAtADYAZgBjADkALQA0ADkAMgBlAC0AOQA1ADIANQAtADkAMgAzADgANwAwAGEAMwBiADkAMAA5ACIAIABjAGkAZAA9ACIAMgAyADAAQQA4ADUANgBCADkAOQAxADIARAA2ADMAOAAiACAAbwBpAGQAPQAiADAAMAAwADAAMAAwADAAMAAtADAAMAAwADAALQAwADAAMAAwAC0AQgA1ADYAMAAtADAAQQA2AEMAMAAwAEEAQgA3ADEARgA4ACIAIAB0AHMAPQAiADAAIgAgAHMAbAA9ACIAdAByAHUAZQAiACAAZQB0AD0AIgBGAHIAZQBlACIAIABhAGQAPQAiADIAMAAyADYALQAwADkALQAyADgAVAAwADkAOgA0ADQAOgA1ADUAWgAiACAAcwBkAD0AIgAyADAAMgA2AC0AMAA5AC0AMgA4ACIAIAB0AGUAPQAiADIAMAAyADcALQAwADkALQAyADgAVAAwADkAOgA0ADYAOgAwADcAWgAiACAAcwBzAD0AIgAwACIAIAAvAD4APABkAD4ATwBZAFIAcQB0AG8AKwBKAHMAZQB6AG8ASwBGAFIAdABQAGgAUABKAHQAYwBLAFQAYwBXAHAAagBXAEcAZgA0AHkAWgBTAHMAZAByADUASQArADAAawA9ADwALwBkAD4APAAvAHIAPgA%3D&_host_Info=Excel$Win32$16.01$en-US$$$$16"}
 	}
 	for key, value := range basispointsClientInfo(cfg) {
 		headers[key] = []string{value}
