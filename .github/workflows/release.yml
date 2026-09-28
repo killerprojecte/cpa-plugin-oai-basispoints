@@ -354,10 +354,7 @@ jobs:
 
       - name: Extract version release notes
         run: |
-          awk -v tag="$RELEASE_TAG" '
-            $1 == "##" { if (found) exit; found = ($2 == tag); next }
-            found { print }
-          ' CHANGELOG.md > release-assets/RELEASE_NOTES.md
+          "$RELEASE_TAG" > release-assets/RELEASE_NOTES.md
           test -s release-assets/RELEASE_NOTES.md
 
       - name: Publish release
