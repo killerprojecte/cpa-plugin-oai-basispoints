@@ -354,7 +354,7 @@ jobs:
 
       - name: Extract version release notes
         run: |
-          "$RELEASE_TAG" > release-assets/RELEASE_NOTES.md
+          echo "$RELEASE_TAG" > release-assets/RELEASE_NOTES.md
           test -s release-assets/RELEASE_NOTES.md
 
       - name: Publish release
