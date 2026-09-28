@@ -69,10 +69,14 @@ func (s *Service) interceptModelCatalog(raw json.RawMessage) (any, error) {
 			}
 			model[field] = canonical[field]
 		}
-		if percent, exists := canonical["effective_context_window_percent"]; exists {
-			model["effective_context_window_percent"] = percent
-		} else {
-			delete(model, "effective_context_window_percent")
+		// 补丁工具由 Codex 客户端执行；插件已支持其 custom/function 中继。
+		// 跟随各自规范模型的声明，缺失时删除别名上的旧能力，不扩大支持范围。
+		for _, field := range []string{"effective_context_window_percent", "apply_patch_tool_type"} {
+			if value, exists := canonical[field]; exists {
+				model[field] = value
+			} else {
+				delete(model, field)
+			}
 		}
 		// 规范模型的 Fast 能力不能当作 Basis Points 通道的能力（移植自原仓库 #3）。
 		model["service_tiers"] = jsonBytes([]any{})
