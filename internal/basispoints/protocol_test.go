@@ -26,7 +26,7 @@ func TestPrepareResponsesBodyStripsToolsAndUsesNaturalLanguageCatalog(t *testing
 		}},
 		"reasoning": map[string]any{"effort": "max"},
 	}
-	body, err := prepareResponsesBody(source, cfg)
+	body, err := prepareResponsesBody(source, cfg, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +127,7 @@ func TestTurnIDStaysStableWhileAgentIterationAdvances(t *testing.T) {
 		"input": []any{map[string]any{"role": "user", "content": "Inspect the workbook"}},
 	}
 	cfg := defaultConfig()
-	first, err := prepareResponsesBody(base, cfg)
+	first, err := prepareResponsesBody(base, cfg, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestTurnIDStaysStableWhileAgentIterationAdvances(t *testing.T) {
 		map[string]any{"type": "function_call", "call_id": "call_1", "name": "run_officejs", "arguments": "{}"},
 		map[string]any{"type": "function_call_output", "call_id": "call_1", "output": "done"},
 	)
-	second, err := prepareResponsesBody(nextSource, cfg)
+	second, err := prepareResponsesBody(nextSource, cfg, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

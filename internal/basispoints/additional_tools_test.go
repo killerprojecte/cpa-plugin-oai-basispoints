@@ -36,7 +36,7 @@ func TestCodexAdditionalToolsCatalogCallAndReplay(t *testing.T) {
 	if len(specs) != 2 || specs["functions.exec"].Type != "custom" || specs["functions.wait"].Type != "function" {
 		t.Fatalf("Codex tool catalog was not recognized: %#v", specs)
 	}
-	prepared, err := prepareResponsesBody(source, defaultConfig())
+	prepared, err := prepareResponsesBody(source, defaultConfig(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

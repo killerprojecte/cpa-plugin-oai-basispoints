@@ -23,6 +23,14 @@ type Service struct {
 	host        HostCall
 	stopped     bool
 
+	// sessions 保存按凭据区分的 ARC 会话（会话链路，见 arc.go）。
+	sessions *sessionManager
+	// ids 铸造模拟模式下按会话/轮次稳定的 task_id/turn_id（见 client_ids.go）。
+	ids *clientIDAllocator
+	// configured 为真表示插件已通过 ABI 配置（plugin.register/reconfigure）。会话链路只在
+	// 真实执行器调用中启用，避免零值 Service（如单元测试）触发额外的宿主回调。
+	configured bool
+
 	// life 是当前生命周期（一代）。每次往返在 beginStream 时绑定进入时的那一代，之后只引用
 	// 它自己的 ctx 与计数；shutdown 只取消并等待它那一代，configure 重建的新一代与旧往返
 	// 完全隔离。lifeMu 串行化「停止（含等待）」与「重建」这两个状态转换。
@@ -56,7 +64,7 @@ var shutdownWait = 5 * time.Second // var：测试可缩短
 
 func NewService() *Service {
 	cfg := defaultConfig()
-	return &Service{cfg: cfg, life: newLifecycle()}
+	return &Service{cfg: cfg, life: newLifecycle(), sessions: newSessionManager(), ids: newClientIDAllocator()}
 }
 
 // beginStream 登记一次流式往返并绑定当前这一代。插件已停止时拒绝；返回的 ctx 在该代
@@ -163,12 +171,23 @@ func (s *Service) configure(raw json.RawMessage) error {
 	defer s.lifeMu.Unlock()
 	s.mu.Lock()
 	s.cfg = cfg
+	s.configured = true
 	if s.stopped {
 		s.life = newLifecycle()
 	}
 	s.stopped = false
 	s.mu.Unlock()
+	// 凭据/配置变化后旧会话不再有效，丢弃以便按新配置重建；已铸造的 task/turn id 同理作废。
+	s.sessions.reset()
+	s.ids.reset()
 	return nil
+}
+
+// abiConfigured 表示插件是否已通过 ABI 配置（真实 CPA 运行时会调用 plugin.register）。
+func (s *Service) abiConfigured() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.configured
 }
 
 // fillFromMirror 用已有的 settings.json 镜像补齐 YAML 未提供的键。镜像不存在视为无镜像；

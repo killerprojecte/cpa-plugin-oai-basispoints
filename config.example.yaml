@@ -96,6 +96,43 @@ plugins:
       ua_brands: "Google Chrome,Not_A Brand,Chromium"
       # 浏览器主版本号，默认 153.0.0.0。
       chrome_version: "153.0.0.0"
+      # x-openai-internal-basispoints-browser-name 的值，默认 chrome。
+      browser_name: chrome
+      # sec-ch-ua 的值，默认与 Chrome 153 一致；留空回落默认。
+      sec_ch_ua: '"Google Chrome";v="153", "Not_A Brand";v="8", "Chromium";v="153"'
+      # accept-language 的值，默认 zh-CN,zh;q=0.9；留空回落默认。
+      accept_language: "zh-CN,zh;q=0.9"
+      # accept-encoding 的值，默认 identity（不请求压缩）。
+      # 宿主 http.do 不会替插件解压显式请求的压缩正文，因此默认不启用压缩；如确认宿主会解压
+      # 再改为 gzip, deflate, br 等真实值。留空回落默认。
+      accept_encoding: identity
+      # Referer 默认指向扩展页面路径（含 _host_Info，不含 et 权益令牌）。
+      # et 是宿主导航时附加的签名令牌，插件无法自行获取，因此不伪造。
+      # 留空用内置默认；none/off/-/false/disable 表示不发送；其他值按原样发送。
+      referer: ""
+      # 默认 Referer 中的扩展安装 id（页面路径段），通常无需修改。
+      extension_pid: 360590d7-f8f9-4d88-bf75-0edfe0a4b9f3
+      # 默认 Referer 中 _host_Info 的 locale（Office 宿主注入），默认 en-US。
+      host_info_locale: en-US
+
+      # context_management：默认开启。客户端未提供该字段时，注入网页版同款 compaction 策略；
+      # 客户端已提供时一律透传，不改写。设为 false 关闭注入（回到不发送的旧行为）。
+      context_management: true
+      # 注入 compaction 策略时使用的阈值，范围 1000～100000000，默认 200000。
+      context_management_compact_threshold: 200000
+
+      # session_call_chain：默认开启。在请求 /responses 之前，按网页版顺序建立会话链路：
+      # responses/access → accounts/check → ARC register → ready（并周期性 heartbeat）；
+      # 任一环节失败都不影响后续 /responses 调用。设为 false 完全跳过该链路。
+      session_call_chain: true
+      # ARC 执行器心跳间隔（秒），范围 0～600，默认 60；0 关闭心跳（仍会 register/ready）。
+      arc_heartbeat_seconds: 60
+
+      # task_id/turn_id 生成方式：默认开启仿真，用真实客户端的 UUIDv7（48 位毫秒时间戳 +
+      # 版本位 7 + 单调计数器 + 随机尾）铸造，与真实客户端行为一致——同一会话的 task_id 稳定、
+      # 同一轮次的 turn_id 稳定（该轮次的多次 agent iteration 共用），不同会话/轮次互不相同。
+      # 设为 false 则回退旧的确定性 uuidV5（同样输入恒得同一 id，便于重放去重，但不是 v7）。
+      simulate_task_turn_ids: true
 
       # 非敏感配置的持久化目录，默认值为 plugins/oai-basispoints-data。
       # 面板/YAML 是唯一配置来源：YAML 中出现的键总是生效，settings.json 只补齐 YAML 未提供

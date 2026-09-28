@@ -28,6 +28,23 @@ const (
 	DefaultUABrands      = "Google Chrome,Not_A Brand,Chromium"
 	DefaultChromeVersion = "153.0.0.0"
 
+	// 浏览器指纹补充头默认值（与上面的 UA 默认一致）。
+	DefaultBrowserName    = "chrome"
+	DefaultSecCHUA        = `"Google Chrome";v="153", "Not_A Brand";v="8", "Chromium";v="153"`
+	DefaultAcceptLanguage = "zh-CN,zh;q=0.9"
+	// DefaultAcceptEncoding 保持 identity：宿主 http.do 不会替插件解压显式请求的压缩正文。
+	DefaultAcceptEncoding = "identity"
+	// DefaultExtensionPID 是抓包观测到的插件安装 id（页面路径段），仅用于拼默认 Referer。
+	DefaultExtensionPID = "360590d7-f8f9-4d88-bf75-0edfe0a4b9f3"
+	// DefaultHostInfoLocale 是 Office 宿主附加到 Referer 的 _host_Info locale。
+	DefaultHostInfoLocale = "en-US"
+
+	// DefaultCompactThreshold 是自动注入 compaction 策略时的默认阈值（网页版实测 200000）。
+	DefaultCompactThreshold = 200000
+	// DefaultArcHeartbeatSeconds 是 ARC 执行器心跳间隔（网页版为 60s；0 关闭）。
+	DefaultArcHeartbeatSeconds = 60
+	maxArcHeartbeatSeconds     = 600
+
 	// TransportHTTP 保持 v0.1.10 的一次性缓冲 HTTP 行为；TransportWS 走 WebSocket。
 	TransportHTTP = "http"
 	TransportWS   = "ws"
@@ -174,6 +191,34 @@ type Config struct {
 	// AlphaSearchModel 非空时，Basis Points 模型的 Codex 网页搜索（/v1/alpha/search）改由
 	// 原生 codex 凭据处理，并用该原生模型名挑选凭据；留空表示关闭（默认）。
 	AlphaSearchModel string `yaml:"alpha_search_model" json:"alpha_search_model"`
+
+	// 以下为网页版画像/协议保真补充项。
+	BrowserName    string `yaml:"browser_name" json:"browser_name"`
+	SecCHUA        string `yaml:"sec_ch_ua" json:"sec_ch_ua"`
+	AcceptLanguage string `yaml:"accept_language" json:"accept_language"`
+	AcceptEncoding string `yaml:"accept_encoding" json:"accept_encoding"`
+	// Referer 留空使用内置默认（扩展路径 + _host_Info，不含 et 令牌）；none/off/-/false
+	// 表示不发送 Referer；其他值按原样发送。
+	Referer        string `yaml:"referer" json:"referer"`
+	ExtensionPID   string `yaml:"extension_pid" json:"extension_pid"`
+	HostInfoLocale string `yaml:"host_info_locale" json:"host_info_locale"`
+
+	// ContextManagement 为真（默认）且客户端未提供 context_management 时，注入默认
+	// compaction 策略；nil 视为真。
+	ContextManagement *bool `yaml:"context_management" json:"context_management"`
+	// CompactThreshold 是注入 compaction 策略时的阈值。
+	CompactThreshold int `yaml:"context_management_compact_threshold" json:"context_management_compact_threshold"`
+
+	// SessionCallChain 为真（默认）时，在 /responses 之前建立网页版同款会话链路：
+	// access + accounts/check + ARC register/ready/heartbeat；失败不影响 /responses。
+	SessionCallChain *bool `yaml:"session_call_chain" json:"session_call_chain"`
+	// ArcHeartbeatSeconds 是 ARC 心跳间隔；0 关闭心跳（仍会 register/ready）。
+	ArcHeartbeatSeconds *int `yaml:"arc_heartbeat_seconds" json:"arc_heartbeat_seconds"`
+
+	// SimulateTaskTurnIDs 为真（默认）时，metadata.task_id/turn_id 用真实客户端的
+	// UUIDv7 生成方式（48 位毫秒时间戳 + 版本 7 + 单调计数器 + 随机尾）仿真；为假时退回
+	// 旧的确定性 uuidV5。nil 视为真。
+	SimulateTaskTurnIDs *bool `yaml:"simulate_task_turn_ids" json:"simulate_task_turn_ids"`
 }
 
 func defaultConfig() Config {
@@ -191,10 +236,24 @@ func defaultConfig() Config {
 		ChromeVersion:    DefaultChromeVersion,
 		Transport:        TransportHTTP,
 		HeartbeatSeconds: intPtr(DefaultHeartbeatSeconds),
+
+		BrowserName:         DefaultBrowserName,
+		SecCHUA:             DefaultSecCHUA,
+		AcceptLanguage:      DefaultAcceptLanguage,
+		AcceptEncoding:      DefaultAcceptEncoding,
+		ExtensionPID:        DefaultExtensionPID,
+		HostInfoLocale:      DefaultHostInfoLocale,
+		ContextManagement:   boolPtr(true),
+		CompactThreshold:    DefaultCompactThreshold,
+		SessionCallChain:    boolPtr(true),
+		ArcHeartbeatSeconds: intPtr(DefaultArcHeartbeatSeconds),
+		SimulateTaskTurnIDs: boolPtr(true),
 	}
 }
 
 func intPtr(value int) *int { return &value }
+
+func boolPtr(value bool) *bool { return &value }
 
 func (c *Config) normalize() error {
 	if c == nil {
@@ -305,6 +364,44 @@ func (c *Config) normalize() error {
 		return fail(400, "invalid_config", fmt.Sprintf("heartbeat_seconds must be between 0 and %d", maxHeartbeatSeconds))
 	}
 
+	// 网页版画像/协议保真项：留空回退默认，避免发送空头。
+	if c.BrowserName = strings.TrimSpace(c.BrowserName); c.BrowserName == "" {
+		c.BrowserName = DefaultBrowserName
+	}
+	if c.SecCHUA = strings.TrimSpace(c.SecCHUA); c.SecCHUA == "" {
+		c.SecCHUA = DefaultSecCHUA
+	}
+	if c.AcceptLanguage = strings.TrimSpace(c.AcceptLanguage); c.AcceptLanguage == "" {
+		c.AcceptLanguage = DefaultAcceptLanguage
+	}
+	if c.AcceptEncoding = strings.TrimSpace(c.AcceptEncoding); c.AcceptEncoding == "" {
+		c.AcceptEncoding = DefaultAcceptEncoding
+	}
+	if c.ExtensionPID = strings.TrimSpace(c.ExtensionPID); c.ExtensionPID == "" {
+		c.ExtensionPID = DefaultExtensionPID
+	}
+	if c.HostInfoLocale = strings.TrimSpace(c.HostInfoLocale); c.HostInfoLocale == "" {
+		c.HostInfoLocale = DefaultHostInfoLocale
+	}
+	c.Referer = strings.TrimSpace(c.Referer)
+	if c.CompactThreshold < 1000 || c.CompactThreshold > 100_000_000 {
+		return fail(400, "invalid_config", "context_management_compact_threshold must be between 1000 and 100000000")
+	}
+	if c.SessionCallChain == nil {
+		c.SessionCallChain = boolPtr(true)
+	}
+	if c.ContextManagement == nil {
+		c.ContextManagement = boolPtr(true)
+	}
+	if c.ArcHeartbeatSeconds == nil {
+		c.ArcHeartbeatSeconds = intPtr(DefaultArcHeartbeatSeconds)
+	} else if *c.ArcHeartbeatSeconds < 0 || *c.ArcHeartbeatSeconds > maxArcHeartbeatSeconds {
+		return fail(400, "invalid_config", fmt.Sprintf("arc_heartbeat_seconds must be between 0 and %d", maxArcHeartbeatSeconds))
+	}
+	if c.SimulateTaskTurnIDs == nil {
+		c.SimulateTaskTurnIDs = boolPtr(true)
+	}
+
 	// 被标记为「Excel 专用」的凭据文件名：与外部刷新脚本的标记契约同一规则——
 	// 裸 auth-dir 文件名、区分大小写、不允许首尾空白/路径/重复。不合法即配置错误。
 	if len(c.DedicatedAuthFiles) == 0 {
@@ -332,6 +429,37 @@ func (c Config) heartbeatInterval() time.Duration {
 	return time.Duration(*c.HeartbeatSeconds) * time.Second
 }
 
+// contextManagementEnabled 表示客户端未提供 context_management 时是否注入默认 compaction 策略。
+func (c Config) contextManagementEnabled() bool {
+	return c.ContextManagement == nil || *c.ContextManagement
+}
+
+// compactThreshold 返回注入 compaction 策略使用的阈值。
+func (c Config) compactThreshold() int {
+	if c.CompactThreshold <= 0 {
+		return DefaultCompactThreshold
+	}
+	return c.CompactThreshold
+}
+
+// sessionCallChain 表示是否在 /responses 之前建立网页版同款会话链路。
+func (c Config) sessionCallChain() bool {
+	return c.SessionCallChain == nil || *c.SessionCallChain
+}
+
+// arcHeartbeatInterval 返回 ARC 心跳间隔；0 表示关闭心跳。
+func (c Config) arcHeartbeatInterval() time.Duration {
+	if c.ArcHeartbeatSeconds == nil {
+		return DefaultArcHeartbeatSeconds * time.Second
+	}
+	return time.Duration(*c.ArcHeartbeatSeconds) * time.Second
+}
+
+// simulateTaskTurnIDs 表示是否用真实客户端的 UUIDv7 方式仿真 task_id/turn_id。
+func (c Config) simulateTaskTurnIDs() bool {
+	return c.SimulateTaskTurnIDs == nil || *c.SimulateTaskTurnIDs
+}
+
 // dedicatedSet 返回专用凭据文件名集合，供 auth.parse 隔离判定使用。
 func (c Config) dedicatedSet() map[string]bool {
 	if len(c.DedicatedAuthFiles) == 0 {
@@ -350,6 +478,18 @@ func (c Config) clone() Config {
 	c.DedicatedAuthFiles = append([]string(nil), c.DedicatedAuthFiles...)
 	if c.HeartbeatSeconds != nil {
 		c.HeartbeatSeconds = intPtr(*c.HeartbeatSeconds)
+	}
+	if c.ContextManagement != nil {
+		c.ContextManagement = boolPtr(*c.ContextManagement)
+	}
+	if c.SessionCallChain != nil {
+		c.SessionCallChain = boolPtr(*c.SessionCallChain)
+	}
+	if c.ArcHeartbeatSeconds != nil {
+		c.ArcHeartbeatSeconds = intPtr(*c.ArcHeartbeatSeconds)
+	}
+	if c.SimulateTaskTurnIDs != nil {
+		c.SimulateTaskTurnIDs = boolPtr(*c.SimulateTaskTurnIDs)
 	}
 	return c
 }

@@ -551,7 +551,7 @@ func prependBeforeCompaction(items []any, prefix []any) []any {
 	return append(result, items...)
 }
 
-func prepareResponsesBody(source map[string]any, cfg Config) (map[string]any, error) {
+func prepareResponsesBody(source map[string]any, cfg Config, ids *clientIDAllocator) (map[string]any, error) {
 	// 上游不支持 ID 续接：明确拒绝，避免只带增量 input 时静默丢失上下文（移植自原仓库 #10）。
 	if previous, exists := source["previous_response_id"]; exists && previous != nil {
 		return nil, fail(400, "unsupported_continuation", "oai-basispoints does not support previous_response_id; omit it and send the complete input history, including tool calls and results")
@@ -588,11 +588,14 @@ func prepareResponsesBody(source map[string]any, cfg Config) (map[string]any, er
 		"input":            inputItems,
 		"reasoning_effort": reasoningEffortFromSource(source),
 	}
-	// 未指定或为空时省略可选字段，不发送服务端拒绝的空数组。
+	// 客户端提供有效策略时透传；未提供/为空且开启（默认）时注入默认 compaction 策略。
 	if policy, exists := source["context_management"]; exists && policy != nil {
 		if entries, isArray := policy.([]any); !isArray || len(entries) > 0 {
 			output["context_management"] = policy
 		}
+	}
+	if _, present := output["context_management"]; !present && cfg.contextManagementEnabled() {
+		output["context_management"] = []any{map[string]any{"type": "compaction", "compact_threshold": cfg.compactThreshold()}}
 	}
 	if cacheKey := explicitConversationKey(source); cacheKey != "" {
 		output["prompt_cache_key"] = cacheKey
@@ -617,8 +620,15 @@ func prepareResponsesBody(source map[string]any, cfg Config) (map[string]any, er
 	if conversation == "" {
 		conversation = historyRoot
 	}
-	metadata["task_id"] = uuidV5("cpa-oai-basispoints/" + conversation)
-	metadata["turn_id"] = uuidV5("cpa-oai-basispoints/" + conversation + "/turn/" + turnFingerprint)
+	if ids != nil {
+		// 模拟模式：task_id/turn_id 用真实客户端的 UUIDv7 方式铸造（时间序 + 随机）。
+		metadata["task_id"] = ids.taskID(conversation)
+		metadata["turn_id"] = ids.turnID(conversation, turnFingerprint)
+	} else {
+		// 回退：确定性 uuidV5（同一会话/轮次恒等，便于重放去重）。
+		metadata["task_id"] = uuidV5("cpa-oai-basispoints/" + conversation)
+		metadata["turn_id"] = uuidV5("cpa-oai-basispoints/" + conversation + "/turn/" + turnFingerprint)
+	}
 	metadata["agent_iteration"] = iteration
 	if cfg.ToolsVersionID != "" {
 		metadata["bps_tools_version_id"] = cfg.ToolsVersionID

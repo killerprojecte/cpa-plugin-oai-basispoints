@@ -314,7 +314,7 @@ func TestClientToolChoiceConstrainsCallsButNotHistory(t *testing.T) {
 			}
 			historical := map[string]any{"type": "function_call", "name": "js", "namespace": "alpha", "call_id": "uncached_history_" + t.Name(), "arguments": `{}`}
 			source["input"] = []any{historical}
-			prepared, err := prepareResponsesBody(source, defaultConfig())
+			prepared, err := prepareResponsesBody(source, defaultConfig(), nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -328,7 +328,7 @@ func TestClientToolChoiceConstrainsCallsButNotHistory(t *testing.T) {
 
 func TestRequiredToolChoiceWithoutMatchingToolsIsRejected(t *testing.T) {
 	for _, choice := range []any{"required", map[string]any{"type": "function", "name": "missing"}, map[string]any{"type": "allowed_tools", "mode": "required", "tools": []any{}}} {
-		_, err := prepareResponsesBody(map[string]any{"input": "hello", "tool_choice": choice}, defaultConfig())
+		_, err := prepareResponsesBody(map[string]any{"input": "hello", "tool_choice": choice}, defaultConfig(), nil)
 		var apiError *APIError
 		if !errors.As(err, &apiError) || apiError.Status != 400 || apiError.Kind != "invalid_tool_choice" {
 			t.Fatalf("choice=%v err=%v", choice, err)

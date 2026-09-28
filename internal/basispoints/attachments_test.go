@@ -129,7 +129,7 @@ func TestInlineImageUploadWireContract(t *testing.T) {
 					t.Fatal(err)
 				}
 				source, _ := rawObject(sourceRaw)
-				before, _ := prepareResponsesBody(source, service.config())
+				before, _ := prepareResponsesBody(source, service.config(), service.ids)
 				if !reflect.DeepEqual(body["metadata"], before["metadata"]) {
 					t.Fatal("upload changed task or turn metadata")
 				}

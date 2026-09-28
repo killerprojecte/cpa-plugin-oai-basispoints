@@ -41,7 +41,7 @@ func TestUnsupportedRequestContracts(t *testing.T) {
 func TestStandardServiceTierIsOmitted(t *testing.T) {
 	for _, tier := range []any{nil, "auto", "default"} {
 		source := map[string]any{"model": DefaultModelID, "input": "Hello", "service_tier": tier}
-		body, err := prepareResponsesBody(source, defaultConfig())
+		body, err := prepareResponsesBody(source, defaultConfig(), nil)
 		if err != nil {
 			t.Fatal(err)
 		}

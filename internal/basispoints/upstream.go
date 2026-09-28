@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -37,13 +38,21 @@ func (s *Service) prepareRequest(request ExecutorRequest) (map[string]any, crede
 		return nil, credential{}, err
 	}
 	cfg := s.config()
+	// 会话链路：在 /responses 之前建立/保活网页版同款会话（尽力而为，失败不影响推理）。
+	if s.abiConfigured() {
+		s.ensureSession(request, c, cfg)
+	}
 	model := stringValue(source["model"])
 	if model == "" {
 		model = strings.TrimSpace(request.Model)
 	}
 	source["model"] = model
 	source["stream"] = request.Stream
-	prepared, err := prepareResponsesBody(source, cfg)
+	var ids *clientIDAllocator
+	if cfg.simulateTaskTurnIDs() {
+		ids = s.ids
+	}
+	prepared, err := prepareResponsesBody(source, cfg, ids)
 	if err != nil {
 		return nil, credential{}, err
 	}
@@ -66,6 +75,10 @@ func basispointsClientInfo(cfg Config) map[string]string {
 	if uaBrands == "" {
 		uaBrands = DefaultUABrands
 	}
+	browserName := strings.TrimSpace(cfg.BrowserName)
+	if browserName == "" {
+		browserName = DefaultBrowserName
+	}
 	return map[string]string{
 		"X-Openai-Internal-Basispoints-Client-Product":        "basispoints-excel-plugin",
 		"X-Openai-Internal-Basispoints-Client-Platform":       "excel",
@@ -76,11 +89,41 @@ func basispointsClientInfo(cfg Config) map[string]string {
 		"X-Openai-Internal-Basispoints-Client-Platform-Class": "PC",
 		"X-Openai-Internal-Basispoints-Office-Host":           "Excel",
 		"X-Openai-Internal-Basispoints-Office-Platform":       "PC",
-		"X-Openai-Internal-Basispoints-Browser-Name":          "chrome",
+		"X-Openai-Internal-Basispoints-Browser-Name":          browserName,
 		"X-Openai-Internal-Basispoints-Browser-UA-Platform":   uaPlatform,
 		"X-Openai-Internal-Basispoints-Browser-UA-Mobile":     "false",
 		"X-Openai-Internal-Basispoints-Browser-UA-Brands":     uaBrands,
 	}
+}
+
+// refererValue 计算 Referer 头：留空用内置默认（扩展路径 + _host_Info，不含无法自行获取的
+// et 权益令牌）；none/off/-/false 表示不发送；其它值按原样发送。
+func refererValue(cfg Config) string {
+	raw := strings.TrimSpace(cfg.Referer)
+	switch strings.ToLower(raw) {
+	case "none", "off", "-", "false", "disable", "disabled":
+		return ""
+	case "":
+		pid := strings.TrimSpace(cfg.ExtensionPID)
+		if pid == "" {
+			pid = DefaultExtensionPID
+		}
+		locale := strings.TrimSpace(cfg.HostInfoLocale)
+		if locale == "" {
+			locale = DefaultHostInfoLocale
+		}
+		return fmt.Sprintf("%s/basispoints/extension/%s/?_host_Info=Excel$Win32$16.01$%s$$$$16", apiOrigin(cfg), pid, locale)
+	default:
+		return raw
+	}
+}
+
+// apiOrigin 从 responses_url 推导 API 源（scheme://host），兜底为 bps.openai.com。
+func apiOrigin(cfg Config) string {
+	if u, err := url.Parse(strings.TrimSpace(cfg.ResponsesURL)); err == nil && u.Scheme != "" && u.Host != "" {
+		return u.Scheme + "://" + u.Host
+	}
+	return "https://bps.openai.com"
 }
 
 func authHeaders(c credential, cfg Config, stream bool) http.Header {
@@ -92,7 +135,23 @@ func authHeaders(c credential, cfg Config, stream bool) http.Header {
 	if userAgent == "" {
 		userAgent = DefaultUserAgent
 	}
-	// 网页版客户端画像；access token 本身绝不写入日志。不发 referer。
+	uaPlatform := strings.TrimSpace(cfg.UAPlatform)
+	if uaPlatform == "" {
+		uaPlatform = DefaultUAPlatform
+	}
+	secCHUA := strings.TrimSpace(cfg.SecCHUA)
+	if secCHUA == "" {
+		secCHUA = DefaultSecCHUA
+	}
+	acceptLanguage := strings.TrimSpace(cfg.AcceptLanguage)
+	if acceptLanguage == "" {
+		acceptLanguage = DefaultAcceptLanguage
+	}
+	acceptEncoding := strings.TrimSpace(cfg.AcceptEncoding)
+	if acceptEncoding == "" {
+		acceptEncoding = DefaultAcceptEncoding
+	}
+	// 网页版客户端画像；access token 本身绝不写入日志。
 	headers := http.Header{
 		"Authorization":               []string{"Bearer " + c.AccessToken},
 		"ChatGPT-Account-ID":          []string{c.AccountID},
@@ -100,8 +159,16 @@ func authHeaders(c credential, cfg Config, stream bool) http.Header {
 		"X-Basispoints-Auth-Mode":     []string{c.AuthMode},
 		"Content-Type":                []string{"application/json"},
 		"Accept":                      []string{accept},
-		"Accept-Encoding":             []string{"identity"},
-		"Origin":                      []string{"https://bps.openai.com"},
+		"Accept-Encoding":             []string{acceptEncoding},
+		"Accept-Language":             []string{acceptLanguage},
+		"Origin":                      []string{apiOrigin(cfg)},
+		"Sec-Ch-Ua":                   []string{secCHUA},
+		"Sec-Ch-Ua-Mobile":            []string{"?0"},
+		"Sec-Ch-Ua-Platform":          []string{quoteHeaderValue(uaPlatform)},
+		"Sec-Fetch-Site":              []string{"same-origin"},
+		"Sec-Fetch-Mode":              []string{"cors"},
+		"Sec-Fetch-Dest":              []string{"empty"},
+		"Priority":                    []string{"u=1, i"},
 		"X-Stainless-Arch":            []string{"unknown"},
 		"X-Stainless-Lang":            []string{"js"},
 		"X-Stainless-OS":              []string{"Unknown"},
@@ -110,7 +177,10 @@ func authHeaders(c credential, cfg Config, stream bool) http.Header {
 		"X-Stainless-Runtime":         []string{"browser:chrome"},
 		"X-Stainless-Runtime-Version": []string{"153.0.0"},
 		"User-Agent":                  []string{userAgent},
-		"Referer":                     []string{"https://bps.openai.com/basispoints/extension/360590d7-f8f9-4d88-bf75-0edfe0a4b9f3/?et=PAByACAAdgA9ACIAMQAiAD4APAB0ACAAYQBpAGQAPQAiAFcAQQAyADAAMAAwADEAMAAyADEANQAiACAAcABpAGQAPQAiAGMAYgBhADkAZgBjADAANgAtADYAZgBjADkALQA0ADkAMgBlAC0AOQA1ADIANQAtADkAMgAzADgANwAwAGEAMwBiADkAMAA5ACIAIABjAGkAZAA9ACIAMgAyADAAQQA4ADUANgBCADkAOQAxADIARAA2ADMAOAAiACAAbwBpAGQAPQAiADAAMAAwADAAMAAwADAAMAAtADAAMAAwADAALQAwADAAMAAwAC0AQgA1ADYAMAAtADAAQQA2AEMAMAAwAEEAQgA3ADEARgA4ACIAIAB0AHMAPQAiADAAIgAgAHMAbAA9ACIAdAByAHUAZQAiACAAZQB0AD0AIgBGAHIAZQBlACIAIABhAGQAPQAiADIAMAAyADYALQAwADkALQAyADgAVAAwADkAOgA0ADQAOgA1ADUAWgAiACAAcwBkAD0AIgAyADAAMgA2AC0AMAA5AC0AMgA4ACIAIAB0AGUAPQAiADIAMAAyADcALQAwADkALQAyADgAVAAwADkAOgA0ADYAOgAwADcAWgAiACAAcwBzAD0AIgAwACIAIAAvAD4APABkAD4ATwBZAFIAcQB0AG8AKwBKAHMAZQB6AG8ASwBGAFIAdABQAGgAUABKAHQAYwBLAFQAYwBXAHAAagBXAEcAZgA0AHkAWgBTAHMAZAByADUASQArADAAawA9ADwALwBkAD4APAAvAHIAPgA%3D&_host_Info=Excel$Win32$16.01$en-US$$$$16"},
+	}
+	// Referer 由浏览器自动附加页面 URL；本插件不伪造其中的 et 权益令牌，留空或显式关闭即可。
+	if referer := refererValue(cfg); referer != "" {
+		headers["Referer"] = []string{referer}
 	}
 	for key, value := range basispointsClientInfo(cfg) {
 		headers[key] = []string{value}
@@ -120,6 +190,15 @@ func authHeaders(c credential, cfg Config, stream bool) http.Header {
 		headers["X-Openai-Account-User-Id"] = []string{c.AccountUserID}
 	}
 	return headers
+}
+
+// quoteHeaderValue 把值包成带引号的形式（sec-ch-ua-platform 需要 "macOS" 这种形态）。
+func quoteHeaderValue(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || strings.HasPrefix(value, `"`) {
+		return value
+	}
+	return `"` + value + `"`
 }
 
 func (s *Service) upstreamRequest(request ExecutorRequest, body map[string]any, c credential, stream bool) (upstreamResponse, error) {

@@ -147,7 +147,7 @@ func TestAdditionalToolsVariantsAreDroppedFromUpstream(t *testing.T) {
 		variant(func(item map[string]any) { delete(item, "role") }),
 	}
 	source := codex0157Source(items...)
-	prepared, err := prepareResponsesBody(source, defaultConfig())
+	prepared, err := prepareResponsesBody(source, defaultConfig(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

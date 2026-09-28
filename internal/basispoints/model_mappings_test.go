@@ -54,7 +54,7 @@ func TestModelMappingsArbitraryCount(t *testing.T) {
 					t.Fatalf("incorrect registration: %#v", models[i])
 				}
 				for _, model := range []string{alias, want} {
-					body, err := prepareResponsesBody(map[string]any{"model": model, "input": "hello"}, cfg)
+					body, err := prepareResponsesBody(map[string]any{"model": model, "input": "hello"}, cfg, nil)
 					if err != nil || body["model"] != want {
 						t.Fatalf("%s routed to %v, want %s: %v", model, body["model"], want, err)
 					}
@@ -361,7 +361,7 @@ func TestModelMappingsExampleConfig(t *testing.T) {
 		"gpt-6-astra-basispoints": "gpt-6-astra",
 		"gpt-5.6-sol-basispoints": "gpt-5.6-sol",
 	} {
-		body, err := prepareResponsesBody(map[string]any{"model": alias, "input": "hello"}, svc.config())
+		body, err := prepareResponsesBody(map[string]any{"model": alias, "input": "hello"}, svc.config(), nil)
 		if err != nil || body["model"] != upstream {
 			t.Fatalf("example alias %s routes to %v, want %s: %v", alias, body["model"], upstream, err)
 		}
