@@ -21,6 +21,12 @@
 - **心跳只在空闲时发送**：最近半个间隔内已有输出（如正文增量）就不插入 `response.in_progress`。
 - **消息回放逐段给出内容**：终态回放（含 ws、缓冲回放）中 message 的 `output_item.added` 以空内容开场，随后给出 `content_part.added` / `output_text.delta` / `output_text.done` / `content_part.done`，与上游事件形态一致。
 
+### 修复
+
+- **恢复 Codex 原生补丁工具的能力声明**（移植自原仓库 JaxsonWang/cpa-plugin-oai-basispoints v0.1.15）：CPA 会删除通用或非原生模型的 `apply_patch_tool_type`，插件别名因此不再声明原生补丁工具，Codex 会话缺少文件修改差异入口。现在别名对该字段的处理与 `effective_context_window_percent` 相同——跟随同一目录中各自规范模型的声明：规范模型有该字段就原样复制，缺失或为 `null` 就删除别名上的旧值，保留缺失/`null` 语义，不为不支持补丁的模型强行开启。
+  - 只移植原仓库该版本的补丁能力修复；同一发布中夹带的多代理版本（`multi_agent_version`）与实验工具（`experimental_supported_tools`）声明未移植。
+  - 新增缺失／`null`／`freeform` 矩阵、多模型映射与幂等的回归覆盖。
+
 ## v0.1.15 — 2026-09-26（UTC）
 
 ### 新增
